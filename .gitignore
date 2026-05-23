@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pth
+*.pt
+*.mp4
+data/
+INRIAPerson/
+output/
+.DS_Store
+.code-review-graph/
