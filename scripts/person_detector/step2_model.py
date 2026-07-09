@@ -4,6 +4,11 @@ import torchvision.models as models
 import torch.nn.functional as F
 
 
+# 6 anchors per cell: 2 scales x 3 aspect ratios. Must stay in sync with
+# AnchorGenerator.
+NUM_ANCHORS = 6
+
+
 class MobileNetV2SSD(nn.Module):
     """
     SSD-style person detector built on MobileNetV2 backbone.
@@ -44,7 +49,7 @@ class MobileNetV2SSD(nn.Module):
 
         # ── Detection heads ───────────────────────────────────────
         # (class + box head for each feature map)
-        self.num_anchors = 3   # per cell
+        self.num_anchors = NUM_ANCHORS   # 2 scales x 3 aspect ratios
 
         feature_channels = [96, 1280, 256, 128, 128]
         self.cls_heads = nn.ModuleList([
@@ -127,57 +132,85 @@ class MobileNetV2SSD(nn.Module):
 
 class AnchorGenerator(nn.Module):
     """
-    Generates default anchor boxes for SSD.
-    Returns tensor of shape [total_anchors, 4] in cx,cy,w,h format (0-1 normalised).
+    SSD anchors with 2 scales per feature map x 3 aspect ratios = 6 anchors
+    per cell. Covers small (distant), medium and large (close-up) persons.
     """
 
     def __init__(self):
         super().__init__()
-
-        # (feature_map_size, scale, aspect_ratios)
-        self.configs = [
-            (19, 0.10, [1.0, 2.0, 0.5]),
-            (10, 0.20, [1.0, 2.0, 0.5]),
-            ( 5, 0.37, [1.0, 2.0, 0.5]),
-            ( 3, 0.54, [1.0, 2.0, 0.5]),
-            ( 1, 0.71, [1.0, 2.0, 0.5]),
+        # (feature_map_size, primary_scale)
+        # Smallest scale 0.06 covers ~18px persons in a 300px input —
+        # critical for the distant/aerial scenes the old model missed.
+        levels = [
+            (19, 0.06),
+            (10, 0.18),
+            ( 5, 0.34),
+            ( 3, 0.54),
+            ( 1, 0.75),
         ]
+        next_scales = [s for (_, s) in levels[1:]] + [0.95]
+        # Wider aspect ratios — persons are tall (h > w), so emphasise that.
+        ratios = [1.0, 0.5, 2.0]
+
+        self.configs = []
+        for (fmap, s), s_next in zip(levels, next_scales):
+            s_extra = (s * s_next) ** 0.5
+            self.configs.append((fmap, [s, s_extra], ratios))
 
     def forward(self):
         anchors = []
-        for (fmap_size, scale, ratios) in self.configs:
+        for (fmap_size, scales, ratios) in self.configs:
             for i in range(fmap_size):
                 for j in range(fmap_size):
                     cx = (j + 0.5) / fmap_size
                     cy = (i + 0.5) / fmap_size
-                    for ratio in ratios:
-                        w = scale * (ratio ** 0.5)
-                        h = scale / (ratio ** 0.5)
-                        anchors.append([cx, cy, w, h])
-
-        return torch.tensor(anchors, dtype=torch.float32)  # [N, 4]
+                    for scale in scales:
+                        for ratio in ratios:
+                            w = scale * (ratio ** 0.5)
+                            h = scale / (ratio ** 0.5)
+                            anchors.append([cx, cy, w, h])
+        return torch.tensor(anchors, dtype=torch.float32)
 
 
 class SSDLoss(nn.Module):
     """
-    Multibox loss = classification loss (focal) + localisation loss (SmoothL1).
-    Uses hard negative mining: keeps neg:pos ratio of 3:1.
+    RetinaNet-style focal loss for SSD. Focal loss handles the extreme
+    pos/neg imbalance on its own, so we do NOT stack hard-negative mining
+    on top. Per-positive normalisation matches the RetinaNet formulation.
+
+    IoU >= iou_threshold (0.5)   -> positive (person)
+    0.4 <= IoU < 0.5             -> ignore (don't contribute to loss)
+    IoU < 0.4                    -> background
     """
 
     def __init__(self, anchors, iou_threshold=0.5,
-                 neg_pos_ratio=3, device="cuda"):
+                 gamma=2.0, alpha=0.25, device="cuda"):
         super().__init__()
-        self.anchors       = anchors.to(device)   # [N, 4] cx,cy,w,h
+        self.anchors       = anchors.to(device)
         self.iou_threshold = iou_threshold
-        self.neg_pos_ratio = neg_pos_ratio
+        self.gamma         = gamma
+        self.alpha         = alpha
         self.device        = device
 
+    def focal_loss(self, logits, targets):
+        valid = targets >= 0
+        if not valid.any():
+            return torch.zeros((), device=logits.device)
+        logits_v  = logits[valid]
+        targets_v = targets[valid]
+        ce = F.cross_entropy(logits_v, targets_v, reduction="none")
+        pt = torch.exp(-ce)
+        alpha = torch.where(
+            targets_v > 0,
+            torch.full_like(ce, self.alpha),
+            torch.full_like(ce, 1.0 - self.alpha),
+        )
+        loss = alpha * ((1 - pt) ** self.gamma) * ce
+        out = torch.zeros_like(targets, dtype=loss.dtype)
+        out[valid] = loss
+        return out
+
     def forward(self, cls_logits, box_preds, targets):
-        """
-        cls_logits : [B, N, num_classes]
-        box_preds  : [B, N, 4]
-        targets    : list of dicts with 'boxes' and 'labels'
-        """
         B = cls_logits.size(0)
         N = self.anchors.size(0)
 
@@ -185,67 +218,50 @@ class SSDLoss(nn.Module):
         gt_locs = torch.zeros(B, N, 4).to(self.device)
 
         for i, target in enumerate(targets):
-            gt_boxes  = target["boxes"].to(self.device)   # [M, 4] cx,cy,w,h
-            gt_labels = target["labels"].to(self.device)  # [M]
-
+            gt_boxes  = target["boxes"].to(self.device)
+            gt_labels = target["labels"].to(self.device)
             if gt_boxes.shape[0] == 0:
                 continue
 
-            # compute IoU between anchors and gt boxes
-            iou = self._iou_cx(self.anchors, gt_boxes)    # [N, M]
+            iou = self._iou_cx(self.anchors, gt_boxes)
+            best_gt_iou,  best_gt_idx  = iou.max(dim=1)
+            _,            best_anc_idx = iou.max(dim=0)
 
-            # for each anchor, best matching gt
-            best_gt_iou,  best_gt_idx  = iou.max(dim=1)  # [N]
-            # for each gt, best matching anchor (ensure every gt matched)
-            best_anc_iou, best_anc_idx = iou.max(dim=0)  # [M]
-
-            # assign gt to best anchor for each gt (guarantee match)
+            # Force best-matching anchor per GT to be a positive
             best_gt_idx[best_anc_idx] = torch.arange(
                 gt_boxes.size(0)).to(self.device)
             best_gt_iou[best_anc_idx] = 1.0
 
-            # classify anchors
-            matched_labels = gt_labels[best_gt_idx]       # [N]
-            matched_labels[best_gt_iou < self.iou_threshold] = 0  # background
+            matched_labels = gt_labels[best_gt_idx]
+            ignore_mask = (best_gt_iou < self.iou_threshold) & \
+                          (best_gt_iou >= 0.4)
+            bg_mask     = best_gt_iou < 0.4
+            matched_labels[ignore_mask] = -1
+            matched_labels[bg_mask]     = 0
 
             gt_cls[i]  = matched_labels
+            gt_locs[i] = self._encode(gt_boxes[best_gt_idx], self.anchors)
 
-            # encode box offsets
-            matched_boxes = gt_boxes[best_gt_idx]         # [N, 4]
-            gt_locs[i]    = self._encode(matched_boxes, self.anchors)
+        pos_mask = gt_cls > 0
+        num_pos  = pos_mask.sum().clamp(min=1).float()
 
-        # ── Classification loss with hard negative mining ─────────
-        pos_mask = gt_cls > 0                             # [B, N]
-        num_pos  = pos_mask.sum(dim=1).clamp(min=1)
-
-        cls_loss_all = F.cross_entropy(
+        cls_loss_per_anchor = self.focal_loss(
             cls_logits.view(-1, cls_logits.size(-1)),
-            gt_cls.view(-1), reduction="none"
+            gt_cls.view(-1),
         ).view(B, N)
+        cls_loss = cls_loss_per_anchor.sum() / num_pos
 
-        # hard negative mining
-        cls_loss_pos = (cls_loss_all * pos_mask.float()).sum(dim=1)
-        cls_loss_neg = cls_loss_all.clone()
-        cls_loss_neg[pos_mask] = -float("inf")
-        num_neg = (self.neg_pos_ratio * num_pos).long()
-        neg_mask = torch.zeros_like(pos_mask)
-        for b in range(B):
-            _, idx = cls_loss_neg[b].sort(descending=True)
-            neg_mask[b, idx[:num_neg[b]]] = 1
+        if pos_mask.any():
+            pos_idx  = pos_mask.unsqueeze(-1).expand_as(box_preds)
+            loc_loss = F.smooth_l1_loss(
+                box_preds[pos_idx].view(-1, 4),
+                gt_locs[pos_mask].view(-1, 4),
+                reduction="sum",
+            ) / num_pos
+        else:
+            loc_loss = torch.zeros((), device=self.device)
 
-        cls_loss = ((cls_loss_all * (pos_mask | neg_mask).float())
-                    .sum(dim=1) / num_pos).mean()
-
-        # ── Localisation loss (only positive anchors) ──────────────
-        pos_idx = pos_mask.unsqueeze(-1).expand_as(box_preds)
-        loc_loss = F.smooth_l1_loss(
-            box_preds[pos_idx].view(-1, 4),
-            gt_locs[pos_mask].view(-1, 4),
-            reduction="mean"
-        ) if pos_mask.any() else torch.tensor(0.0).to(self.device)
-
-        total_loss = cls_loss + loc_loss
-        return total_loss, cls_loss, loc_loss
+        return cls_loss + loc_loss, cls_loss, loc_loss
 
     def _iou_cx(self, a, b):
         """IoU between anchors a [N,4] and gt b [M,4], both cx,cy,w,h."""

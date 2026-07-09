@@ -6,7 +6,10 @@ import os
 sys.path.append("scripts/ppe_classifiers")
 sys.path.append("scripts/person_detector")
 
-from step2_model import PPEDetector, AnchorGenerator, CLASSES, CLASS_TO_IDX, NUM_CLASSES
+from step2_model import (
+    PPEDetector, AnchorGenerator, CLASSES, CLASS_TO_IDX,
+    NUM_CLASSES, LEGACY_NUM_CLASSES, NUM_ANCHORS,
+)
 import torchvision.transforms as T
 
 # ── Config ──────────────────────────────────────────────
@@ -18,17 +21,15 @@ MAX_DETECTIONS  = 30
 INPUT_SIZE      = 300
 # ────────────────────────────────────────────────────────
 CLASS_THRESHOLDS = {
-    "helmet"    : 0.75,   # was 0.90 — too strict, missing real helmets
-    "no_helmet" : 0.55,   # keep
-    "vest"      : 0.55,   # keep
-    "no_vest"   : 0.60,   # keep
-    "gloves"    : 0.35,   # keep
-    "boots"     : 0.35,   # keep
-    "mask"      : 0.50,   # was 0.08 — too low, too many false positives
-    "no_mask"   : 0.50,   # was 0.08 — same
+    "helmet"    : 0.45,
+    "no_helmet" : 0.55,
+    "vest"      : 0.45,
+    "no_vest"   : 0.55,
+    "gloves"    : 0.35,
+    "boots"     : 0.35,
+    "mask"      : 0.40,
+    "no_mask"   : 0.45,
 }
-
-CLASS_THRESHOLDS["helmet"] = 0.20
 
 # colours per class
 CLASS_COLORS = {
@@ -53,7 +54,14 @@ def _num_classes_from_checkpoint(ckpt):
     bias = ckpt["model"].get("cls_heads.0.bias")
     if bias is None:
         return NUM_CLASSES
-    return bias.numel() // 3
+    # bias shape = num_anchors * num_classes; back-compat with old 3-anchor
+    # checkpoints by trying the current anchor count first.
+    for n_anc in (NUM_ANCHORS, 3):
+        if bias.numel() % n_anc == 0:
+            candidate = bias.numel() // n_anc
+            if candidate in (NUM_CLASSES, LEGACY_NUM_CLASSES):
+                return candidate
+    return NUM_CLASSES
 
 
 def _class_index_for_model(cls_name, model_num_classes):
@@ -97,8 +105,6 @@ def nms(boxes, scores, iou_threshold=0.4):
     return keep
 
 
-@torch.no_grad()
-@torch.no_grad()
 @torch.no_grad()
 def detect_ppe(model, anchors, frame_rgb):
     h, w = frame_rgb.shape[:2]
@@ -151,12 +157,6 @@ def detect_ppe(model, anchors, frame_rgb):
     keep = tv_nms(all_boxes, all_scores, NMS_THRESHOLD)
     keep = keep[:MAX_DETECTIONS]
 
-    # debug scores
-    for cls in CLASSES:
-        i = _class_index_for_model(cls, model_num_classes)
-        max_s = scores_all[:, i].max().item()
-        print(f"  Max score {cls:12s}: {max_s:.3f}")
-
     results = []
     for k in keep:
         k = int(k.item())
@@ -205,25 +205,6 @@ def compliance_status(detections):
         else:
             status[name] = ("?", (128, 128, 128))
     return status
-
-    for pos, neg, name in pairs:
-        if pos in detected and neg not in detected:
-            status[name] = ("✓", (0, 255, 0))
-        elif neg in detected:
-            status[name] = ("✗ MISSING", (0, 0, 255))
-        else:
-            status[name] = ("?", (128, 128, 128))
-    return status
-
-
-def draw_compliance(frame, status):
-    y = 30
-    for name, (state, color) in status.items():
-        cv2.putText(frame, f"{name}: {state}",
-                    (10, y), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6, color, 2)
-        y += 25
-    return frame
 
 
 def draw_compliance(frame, status):

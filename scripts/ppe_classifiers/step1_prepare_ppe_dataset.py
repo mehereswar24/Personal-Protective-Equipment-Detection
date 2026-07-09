@@ -19,7 +19,7 @@ DATASET_DIRS = [
 ]
 OUTPUT_DIR   = "data/ppe/merged"
 IMG_SIZE     = 640
-MAX_PER_CLASS = 2500    # max annotations per class to prevent overfitting
+MAX_IMAGES_PER_CLASS = 2500   # cap number of IMAGES that contain each class
 SEED         = 42
 VAL_SPLIT    = 0.1
 TEST_SPLIT   = 0.1
@@ -175,36 +175,76 @@ def collect_all_records():
     return all_records, class_counts
 
 
-def balance_and_cap(records):
-    """
-    Cap each class at MAX_PER_CLASS and balance.
-    Returns capped + shuffled records.
-    """
-    by_class = {c: [] for c in CLASSES}
+def group_by_image(records):
+    """Group flat annotation records by image path."""
+    by_image = {}
     for r in records:
-        by_class[r["label"]].append(r)
+        by_image.setdefault(r["img_path"], []).append(r)
+    return by_image
 
+
+def balance_and_cap_by_image(by_image):
+    """
+    Cap by IMAGE not annotation: select up to MAX_IMAGES_PER_CLASS images
+    that contain each class. An image is kept with ALL of its annotations
+    intact (so the model never sees an unlabeled positive).
+    """
+    # For each class, list of images containing at least one annotation of it
+    images_by_class = {c: [] for c in CLASSES}
+    for img_path, recs in by_image.items():
+        present = {r["label"] for r in recs}
+        for c in present:
+            images_by_class[c].append(img_path)
+
+    # Cap per class, then union
+    kept_images = set()
+    for cls, imgs in images_by_class.items():
+        random.shuffle(imgs)
+        capped = imgs[:MAX_IMAGES_PER_CLASS]
+        before = len(imgs)
+        kept_images.update(capped)
+        print(f"  {cls:15s}: {before:5d} images -> capped to {len(capped)}")
+
+    # Reconstruct records — keep ALL annotations of every kept image
     balanced = []
-    for cls, recs in by_class.items():
-        random.shuffle(recs)
-        capped = recs[:MAX_PER_CLASS]
-        balanced.extend(capped)
-        print(f"  {cls:15s}: {len(recs):5d} → capped to {len(capped)}")
+    for img_path in kept_images:
+        balanced.extend(by_image[img_path])
 
-    random.shuffle(balanced)
+    print(f"  Kept {len(kept_images)} unique images, "
+          f"{len(balanced)} annotations")
     return balanced
 
 
-def split_records(records):
-    """Split into train/val/test."""
-    n        = len(records)
+def split_records_by_image(records):
+    """
+    Split into train/val/test BY IMAGE, so the same image never appears
+    in more than one split.
+    """
+    by_image = group_by_image(records)
+    image_paths = list(by_image.keys())
+    random.shuffle(image_paths)
+
+    n        = len(image_paths)
     n_test   = int(n * TEST_SPLIT)
     n_val    = int(n * VAL_SPLIT)
     n_train  = n - n_test - n_val
 
-    train = records[:n_train]
-    val   = records[n_train:n_train+n_val]
-    test  = records[n_train+n_val:]
+    train_imgs = set(image_paths[:n_train])
+    val_imgs   = set(image_paths[n_train:n_train+n_val])
+    test_imgs  = set(image_paths[n_train+n_val:])
+
+    train, val, test = [], [], []
+    for r in records:
+        if r["img_path"] in train_imgs:
+            train.append(r)
+        elif r["img_path"] in val_imgs:
+            val.append(r)
+        else:
+            test.append(r)
+
+    print(f"  Train : {len(train_imgs)} images, {len(train)} annotations")
+    print(f"  Val   : {len(val_imgs)} images, {len(val)} annotations")
+    print(f"  Test  : {len(test_imgs)} images, {len(test)} annotations")
 
     return train, val, test
 
@@ -240,7 +280,7 @@ def verify_sample(records, n=5):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("STEP 1 — Preparing unified PPE dataset")
+    print("STEP 1 - Preparing unified PPE dataset")
     print("=" * 60)
 
     print("\n[1/4] Collecting annotations from all datasets...")
@@ -250,15 +290,13 @@ if __name__ == "__main__":
         print(f"    {cls:15s}: {cnt}")
     print(f"\n  Total raw annotations: {len(records)}")
 
-    print("\n[2/4] Balancing and capping per class...")
-    records = balance_and_cap(records)
-    print(f"\n  Total after capping: {len(records)}")
+    print("\n[2/4] Balancing and capping per class (by IMAGE)...")
+    by_image = group_by_image(records)
+    print(f"  Unique images: {len(by_image)}")
+    records = balance_and_cap_by_image(by_image)
 
-    print("\n[3/4] Splitting into train/val/test (80/10/10)...")
-    train, val, test = split_records(records)
-    print(f"  Train : {len(train)}")
-    print(f"  Val   : {len(val)}")
-    print(f"  Test  : {len(test)}")
+    print("\n[3/4] Splitting train/val/test by IMAGE (80/10/10)...")
+    train, val, test = split_records_by_image(records)
 
     print("\n[4/4] Saving splits...")
     save_splits(train, val, test)
@@ -266,7 +304,7 @@ if __name__ == "__main__":
     verify_sample(train)
 
     print("\n" + "=" * 60)
-    print("DONE — PPE dataset ready")
+    print("DONE - PPE dataset ready")
     print("=" * 60)
     print(f"\nClasses ({len(CLASSES)}):")
     for i, c in enumerate(CLASSES):

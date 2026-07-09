@@ -32,11 +32,13 @@ spec = importlib.util.spec_from_file_location(
     "ppe_step2", "scripts/ppe_classifiers/step2_model.py")
 ppe_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ppe_module)
-PPEDetector     = ppe_module.PPEDetector
-PPEAnchorGen    = ppe_module.AnchorGenerator
-PPE_CLASSES     = ppe_module.CLASSES
-PPE_CLASS_TO_IDX = ppe_module.CLASS_TO_IDX
-PPE_NUM_CLASSES = ppe_module.NUM_CLASSES
+PPEDetector         = ppe_module.PPEDetector
+PPEAnchorGen        = ppe_module.AnchorGenerator
+PPE_CLASSES         = ppe_module.CLASSES
+PPE_CLASS_TO_IDX    = ppe_module.CLASS_TO_IDX
+PPE_NUM_CLASSES     = ppe_module.NUM_CLASSES
+PPE_LEGACY_CLASSES  = ppe_module.LEGACY_NUM_CLASSES
+PPE_NUM_ANCHORS     = ppe_module.NUM_ANCHORS
 
 import torchvision.transforms as T
 from torchvision.ops import nms as tv_nms
@@ -56,14 +58,14 @@ SORT_IOU_THRESH   = 0.1    # lower threshold to allow for fast movement
 INPUT_SIZE        = 300
 
 PPE_THRESHOLDS = {
-    "helmet"    : 0.20,
+    "helmet"    : 0.45,
     "no_helmet" : 0.55,
-    "vest"      : 0.40,
+    "vest"      : 0.45,
     "no_vest"   : 0.55,
-    "gloves"    : 0.45,
+    "gloves"    : 0.40,
     "boots"     : 0.40,
-    "mask"      : 0.15,   # lowered: mask is a small object, model confidence is low
-    "no_mask"   : 0.30,   # lowered: catches bare-face cases more reliably
+    "mask"      : 0.40,
+    "no_mask"   : 0.45,
 }
 
 # FIX 2: max detections per class — helmet/vest=1, gloves/boots=2 (left+right)
@@ -143,7 +145,14 @@ def _num_classes_from_checkpoint(ckpt):
     bias = ckpt["model"].get("cls_heads.0.bias")
     if bias is None:
         return PPE_NUM_CLASSES
-    return bias.numel() // 3
+    # bias shape = num_anchors * num_classes; back-compat with old 3-anchor
+    # checkpoints by trying the current anchor count first.
+    for n_anc in (PPE_NUM_ANCHORS, 3):
+        if bias.numel() % n_anc == 0:
+            candidate = bias.numel() // n_anc
+            if candidate in (PPE_NUM_CLASSES, PPE_LEGACY_CLASSES):
+                return candidate
+    return PPE_NUM_CLASSES
 
 
 def _ppe_class_index_for_model(cls_name, model_num_classes):

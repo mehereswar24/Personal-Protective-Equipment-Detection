@@ -20,6 +20,10 @@ IDX_TO_CLASS = {i: c for c, i in CLASS_TO_IDX.items()}
 NUM_CLASSES  = len(CLASSES) + 1
 LEGACY_NUM_CLASSES = len(CLASSES)
 
+# Anchor count per feature-map cell. Must stay in sync with AnchorGenerator
+# (2 scales x 3 aspect ratios = 6).
+NUM_ANCHORS = 6
+
 
 class PPEDetector(nn.Module):
     """
@@ -49,7 +53,9 @@ class PPEDetector(nn.Module):
         self.extra3 = self._extra_block(128,  128, stride=3)    # 1x1
 
         # ── Detection heads ───────────────────────────────
-        self.num_anchors     = 3
+        # 6 anchors per cell: 2 scales × 3 aspect ratios. Matches the
+        # AnchorGenerator config below.
+        self.num_anchors     = NUM_ANCHORS
         feature_channels     = [96, 1280, 256, 128, 128]
 
         self.cls_heads = nn.ModuleList([
@@ -114,62 +120,109 @@ class PPEDetector(nn.Module):
 
 
 class AnchorGenerator(nn.Module):
+    """
+    SSD-style anchors: at every cell of every feature map, emit
+    one anchor per (scale, aspect_ratio) pair. We use two scales per
+    feature map — the level's primary scale, and the geometric mean
+    with the next level's scale — to cover sizes that fall between
+    adjacent feature levels. With 3 aspect ratios this yields 6
+    anchors per cell, matching PPEDetector.num_anchors=6.
+    """
+
     def __init__(self):
         super().__init__()
-        self.configs = [
-            (19, 0.10, [1.0, 2.0, 0.5]),
-            (10, 0.20, [1.0, 2.0, 0.5]),
-            ( 5, 0.37, [1.0, 2.0, 0.5]),
-            ( 3, 0.54, [1.0, 2.0, 0.5]),
-            ( 1, 0.71, [1.0, 2.0, 0.5]),
+        # (feature_map_size, primary_scale)
+        levels = [
+            (19, 0.10),
+            (10, 0.20),
+            ( 5, 0.37),
+            ( 3, 0.54),
+            ( 1, 0.71),
         ]
+        next_scales = [s for (_, s) in levels[1:]] + [0.95]
+        ratios = [1.0, 2.0, 0.5]
+
+        self.configs = []
+        for (fmap, s), s_next in zip(levels, next_scales):
+            s_extra = (s * s_next) ** 0.5
+            self.configs.append((fmap, [s, s_extra], ratios))
 
     def forward(self):
         anchors = []
-        for (fmap_size, scale, ratios) in self.configs:
+        for (fmap_size, scales, ratios) in self.configs:
             for i in range(fmap_size):
                 for j in range(fmap_size):
                     cx = (j + 0.5) / fmap_size
                     cy = (i + 0.5) / fmap_size
-                    for ratio in ratios:
-                        w = scale * (ratio ** 0.5)
-                        h = scale / (ratio ** 0.5)
-                        anchors.append([cx, cy, w, h])
+                    for scale in scales:
+                        for ratio in ratios:
+                            w = scale * (ratio ** 0.5)
+                            h = scale / (ratio ** 0.5)
+                            anchors.append([cx, cy, w, h])
         return torch.tensor(anchors, dtype=torch.float32)
 
 
 class SSDLoss(nn.Module):
+    """
+    Focal-loss SSD criterion (RetinaNet-style).
+
+    Focal loss already handles class imbalance by exponentially
+    downweighting easy negatives, so we do NOT stack hard-negative
+    mining on top of it. Per-positive normalisation matches the
+    RetinaNet formulation.
+    """
+
     def __init__(self, anchors, iou_threshold=0.5,
-                 neg_pos_ratio=3, device="cuda"):
+                 gamma=2.0, alpha=0.25, device="cuda"):
         super().__init__()
         self.anchors       = anchors.to(device)
         self.iou_threshold = iou_threshold
-        self.neg_pos_ratio = neg_pos_ratio
+        self.gamma         = gamma
+        self.alpha         = alpha
         self.device        = device
 
-        # class weights — downweight helmet, upweight rare classes
+        # Mild per-class weighting — focal loss does most of the work,
+        # this just nudges the historically-hard small items up a bit
+        # and the over-represented helmet class down. Background gets
+        # its own α via focal_loss.
         weights = torch.ones(NUM_CLASSES)
-        weights[BACKGROUND_IDX] = 0.5
+        weights[BACKGROUND_IDX]            = 1.0
         weights[CLASS_TO_IDX["helmet"]]    = 0.8
-        weights[CLASS_TO_IDX["no_helmet"]] = 1.5
-        weights[CLASS_TO_IDX["vest"]]      = 1.2
-        weights[CLASS_TO_IDX["no_vest"]]   = 1.5
-        weights[CLASS_TO_IDX["gloves"]]    = 2.0
-        weights[CLASS_TO_IDX["boots"]]     = 2.0
-        weights[CLASS_TO_IDX["mask"]]      = 2.5
-        weights[CLASS_TO_IDX["no_mask"]]   = 2.5
+        weights[CLASS_TO_IDX["no_helmet"]] = 1.0
+        weights[CLASS_TO_IDX["vest"]]      = 1.0
+        weights[CLASS_TO_IDX["no_vest"]]   = 1.0
+        weights[CLASS_TO_IDX["gloves"]]    = 1.3
+        weights[CLASS_TO_IDX["boots"]]     = 1.3
+        weights[CLASS_TO_IDX["mask"]]      = 1.5
+        weights[CLASS_TO_IDX["no_mask"]]   = 1.5
         self.register_buffer("class_weights", weights)
 
-    def focal_loss(self, logits, targets, gamma=2.0):
-        """Focal loss to focus on hard misclassified examples."""
-        ce   = torch.nn.functional.cross_entropy(
-            logits, targets, 
+    def focal_loss(self, logits, targets):
+        """Per-anchor focal cross-entropy. `targets` may include -1
+        for ignore (anchors with ambiguous IoU)."""
+        valid = targets >= 0
+        if not valid.any():
+            return torch.zeros((), device=logits.device)
+        logits_v  = logits[valid]
+        targets_v = targets[valid]
+
+        ce = torch.nn.functional.cross_entropy(
+            logits_v, targets_v,
             weight=self.class_weights.to(logits.device),
-            reduction="none"
+            reduction="none",
         )
-        pt   = torch.exp(-ce)
-        loss = ((1 - pt) ** gamma) * ce
-        return loss
+        pt    = torch.exp(-ce)
+        # α weights foreground (positives) vs background
+        alpha = torch.where(
+            targets_v > BACKGROUND_IDX,
+            torch.full_like(ce, self.alpha),
+            torch.full_like(ce, 1.0 - self.alpha),
+        )
+        loss = alpha * ((1 - pt) ** self.gamma) * ce
+
+        out = torch.zeros_like(targets, dtype=loss.dtype)
+        out[valid] = loss
+        return out
 
     def forward(self, cls_logits, box_preds, targets):
         B = cls_logits.size(0)
@@ -187,47 +240,46 @@ class SSDLoss(nn.Module):
 
             iou = self._iou_cx(self.anchors, gt_boxes)
             best_gt_iou,  best_gt_idx  = iou.max(dim=1)
-            best_anc_iou, best_anc_idx = iou.max(dim=0)
+            _,            best_anc_idx = iou.max(dim=0)
 
+            # Force best-matching anchor per GT to be positive
             best_gt_idx[best_anc_idx] = torch.arange(
                 gt_boxes.size(0)).to(self.device)
             best_gt_iou[best_anc_idx] = 1.0
 
             matched_labels = gt_labels[best_gt_idx]
-            matched_labels[best_gt_iou < self.iou_threshold] = -1
+            # Below threshold but above 0.4 → ignore; below 0.4 → background
+            ignore_mask = (best_gt_iou < self.iou_threshold) & \
+                          (best_gt_iou >= 0.4)
+            bg_mask     = best_gt_iou < 0.4
+            matched_labels[ignore_mask] = -1
+            matched_labels[bg_mask]     = 0
 
-            gt_cls[i]  = matched_labels.clamp(min=0)
+            gt_cls[i]  = matched_labels
             gt_locs[i] = self._encode(gt_boxes[best_gt_idx],
                                       self.anchors)
 
-        pos_mask = gt_cls > BACKGROUND_IDX
-        num_pos  = pos_mask.sum(dim=1).clamp(min=1)
+        pos_mask  = gt_cls > BACKGROUND_IDX
+        num_pos   = pos_mask.sum().clamp(min=1).float()
 
-        # focal loss
-        cls_loss_all = self.focal_loss(
+        # Focal classification loss — averaged over positives, as in
+        # RetinaNet. Ignored anchors contribute 0.
+        cls_loss_per_anchor = self.focal_loss(
             cls_logits.view(-1, cls_logits.size(-1)),
-            gt_cls.view(-1)
+            gt_cls.view(-1),
         ).view(B, N)
+        cls_loss = cls_loss_per_anchor.sum() / num_pos
 
-        # hard negative mining
-        cls_loss_neg = cls_loss_all.clone()
-        cls_loss_neg[pos_mask] = -float("inf")
-        num_neg  = (self.neg_pos_ratio * num_pos).long()
-        neg_mask = torch.zeros_like(pos_mask)
-        for b in range(B):
-            _, idx = cls_loss_neg[b].sort(descending=True)
-            neg_mask[b, idx[:num_neg[b]]] = 1
-
-        cls_loss = ((cls_loss_all * (pos_mask | neg_mask).float())
-                    .sum(dim=1) / num_pos).mean()
-
-        # localisation loss
-        pos_idx  = pos_mask.unsqueeze(-1).expand_as(box_preds)
-        loc_loss = torch.nn.functional.smooth_l1_loss(
-            box_preds[pos_idx].view(-1, 4),
-            gt_locs[pos_mask].view(-1, 4),
-            reduction="mean"
-        ) if pos_mask.any() else torch.tensor(0.0).to(self.device)
+        # Localisation loss — smooth L1 over positive anchors only
+        if pos_mask.any():
+            pos_idx  = pos_mask.unsqueeze(-1).expand_as(box_preds)
+            loc_loss = torch.nn.functional.smooth_l1_loss(
+                box_preds[pos_idx].view(-1, 4),
+                gt_locs[pos_mask].view(-1, 4),
+                reduction="sum",
+            ) / num_pos
+        else:
+            loc_loss = torch.zeros((), device=self.device)
 
         return cls_loss + loc_loss, cls_loss, loc_loss
 

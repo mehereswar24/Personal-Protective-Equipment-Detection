@@ -74,15 +74,16 @@ class PPEDataset(Dataset):
                 beta=random.randint(-30, 30)
             )
 
-            # random crop (keep at least 80% of image)
+            # random crop (keep at least 80% of image) — only commit the
+            # crop if at least one annotation survives, otherwise we'd
+            # silently corrupt the boxes/dimensions for this sample.
             if random.random() > 0.5:
                 crop_r = random.uniform(0.8, 1.0)
-                x0 = random.randint(0, int(w*(1-crop_r)))
-                y0 = random.randint(0, int(h*(1-crop_r)))
+                x0  = random.randint(0, max(0, int(w*(1-crop_r))))
+                y0  = random.randint(0, max(0, int(h*(1-crop_r))))
                 x1c = x0 + int(w*crop_r)
                 y1c = y0 + int(h*crop_r)
-                img = img[y0:y1c, x0:x1c]
-                new_boxes = []
+                new_boxes  = []
                 new_labels = []
                 for (x1,y1,x2,y2), lbl in zip(boxes, labels):
                     nx1 = max(0, x1-x0)
@@ -93,9 +94,11 @@ class PPEDataset(Dataset):
                         new_boxes.append([nx1, ny1, nx2, ny2])
                         new_labels.append(lbl)
                 if new_boxes:
+                    img    = img[y0:y1c, x0:x1c]
                     boxes  = new_boxes
                     labels = new_labels
-                h, w = img.shape[:2]
+                    h, w   = img.shape[:2]
+                # else: drop the crop attempt; keep original img/boxes/h/w
 
         # ── Resize ────────────────────────────────────────
         img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))

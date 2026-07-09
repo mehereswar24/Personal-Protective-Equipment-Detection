@@ -12,9 +12,12 @@ from step3_dataset import build_loaders
 DEVICE         = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE     = 16
 NUM_EPOCHS     = 80
-LR             = 5e-3
+# AdamW with sub-1e-3 LR is the standard for SSD-MobileNet finetuning.
+HEAD_LR        = 1e-3      # detection heads + extra blocks
+BACKBONE_LR    = 1e-4      # MobileNetV2 backbone (10× lower)
 WEIGHT_DECAY   = 5e-4
-FREEZE_EPOCHS  = 8
+FREEZE_EPOCHS  = 5         # frozen warmup, then unfreeze
+WARMUP_EPOCHS  = 1         # linear LR warmup at the start
 CHECKPOINT_DIR = "models"
 LOG_EVERY      = 10
 # ────────────────────────────────────────────────────────
@@ -90,6 +93,47 @@ def save_checkpoint(model, optimizer, epoch, val_loss, is_best):
         print(f"  *** Best model saved (val_loss: {val_loss:.4f}) ***")
 
 
+def _build_optimizer(model, backbone_frozen):
+    """Two param groups: heads (HEAD_LR) and backbone (BACKBONE_LR).
+    When the backbone is frozen, its param group is included with
+    requires_grad=False so the optimizer just keeps state for it."""
+    backbone_params = list(model.feature1.parameters()) + \
+                      list(model.feature2.parameters())
+    head_params     = [p for n, p in model.named_parameters()
+                       if not n.startswith(("feature1.", "feature2."))]
+
+    return optim.AdamW(
+        [
+            {"params": backbone_params,
+             "lr": 0.0 if backbone_frozen else BACKBONE_LR,
+             "name": "backbone"},
+            {"params": head_params,
+             "lr": HEAD_LR,
+             "name": "heads"},
+        ],
+        weight_decay=WEIGHT_DECAY,
+    )
+
+
+def _set_lr(optimizer, epoch):
+    """Linear warmup for WARMUP_EPOCHS, then cosine to eta_min over
+    the remaining epochs. Backbone LR is scaled to BACKBONE_LR and
+    head LR to HEAD_LR (their respective targets) by the same factor."""
+    if epoch < WARMUP_EPOCHS:
+        factor = (epoch + 1) / WARMUP_EPOCHS
+    else:
+        import math
+        progress = (epoch - WARMUP_EPOCHS) / max(1, NUM_EPOCHS - WARMUP_EPOCHS)
+        # Cosine decay from 1.0 → ~0.01
+        factor = 0.5 * (1 + math.cos(math.pi * progress)) * 0.99 + 0.01
+
+    for group in optimizer.param_groups:
+        if group["name"] == "backbone":
+            group["lr"] = factor * BACKBONE_LR if group["lr"] > 0 else 0.0
+        else:
+            group["lr"] = factor * HEAD_LR
+
+
 def main():
     print("=" * 60)
     print(f"Training PPE detector on {DEVICE}")
@@ -107,13 +151,7 @@ def main():
     anchors    = anchor_gen()
     criterion  = SSDLoss(anchors, device=str(DEVICE))
 
-    optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=LR, weight_decay=WEIGHT_DECAY
-    )
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=NUM_EPOCHS, eta_min=1e-5
-    )
+    optimizer = _build_optimizer(model, backbone_frozen=True)
 
     best_val_loss = float("inf")
     no_improve    = 0
@@ -122,20 +160,19 @@ def main():
     for epoch in range(1, NUM_EPOCHS+1):
         t0 = time.time()
 
-        # unfreeze backbone after freeze epochs
+        # Unfreeze backbone: just flip requires_grad and let its LR
+        # group come alive at the cosine-scaled BACKBONE_LR.
         if epoch == FREEZE_EPOCHS + 1:
             unfreeze_backbone(model)
-            optimizer = optim.AdamW(
-                model.parameters(),
-                lr=LR*0.1, weight_decay=WEIGHT_DECAY
-            )
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                optimizer,
-                T_max=NUM_EPOCHS-FREEZE_EPOCHS, eta_min=1e-6
-            )
+            for group in optimizer.param_groups:
+                if group["name"] == "backbone":
+                    group["lr"] = BACKBONE_LR
 
-        print(f"\nEpoch {epoch}/{NUM_EPOCHS} "
-              f"(lr={optimizer.param_groups[0]['lr']:.2e})")
+        _set_lr(optimizer, epoch - 1)
+
+        lrs = " / ".join(f"{g['name']}={g['lr']:.2e}"
+                         for g in optimizer.param_groups)
+        print(f"\nEpoch {epoch}/{NUM_EPOCHS} (lr: {lrs})")
 
         train_loss, train_cls, train_loc = train_one_epoch(
             model, train_loader, criterion, optimizer, epoch)
@@ -143,7 +180,6 @@ def main():
         val_loss, val_cls, val_loc = validate(
             model, val_loader, criterion)
 
-        scheduler.step()
         elapsed = time.time() - t0
 
         print(f"  Train : {train_loss:.4f} "

@@ -12,16 +12,17 @@ from step2_model import MobileNetV2SSD, AnchorGenerator, SSDLoss
 # ── Config ──────────────────────────────────────────────
 DEVICE       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE   = 16
-NUM_EPOCHS   = 50
-LR           = 1e-3
+NUM_EPOCHS   = 60
+HEAD_LR      = 1e-3      # detection heads + extra blocks
+BACKBONE_LR  = 1e-4      # MobileNetV2 backbone (10x lower)
 WEIGHT_DECAY = 5e-4
+WARMUP_EPOCHS  = 1
+FREEZE_EPOCHS  = 5       # frozen warmup then full fine-tune
 NUM_WORKERS  = 0
 CHECKPOINT_DIR = "models"
-LOG_DIR        = "output/runs"
+LOG_DIR        = "output/runs_person"
 SPLITS_JSON    = "data/person/splits.json"
-
-# freeze backbone for first N epochs, then unfreeze
-FREEZE_EPOCHS  = 5
+PATIENCE       = 15
 # ────────────────────────────────────────────────────────
 
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -133,6 +134,38 @@ def save_checkpoint(model, optimizer, epoch, val_loss, is_best=False):
         print(f"  *** New best model saved (val_loss: {val_loss:.4f}) ***")
 
 
+def _build_optimizer(model, backbone_frozen):
+    backbone_params = list(model.feature1.parameters()) + \
+                      list(model.feature2.parameters())
+    head_params     = [p for n, p in model.named_parameters()
+                       if not n.startswith(("feature1.", "feature2."))]
+    return optim.AdamW(
+        [
+            {"params": backbone_params,
+             "lr": 0.0 if backbone_frozen else BACKBONE_LR,
+             "name": "backbone"},
+            {"params": head_params,
+             "lr": HEAD_LR,
+             "name": "heads"},
+        ],
+        weight_decay=WEIGHT_DECAY,
+    )
+
+
+def _set_lr(optimizer, epoch):
+    import math
+    if epoch < WARMUP_EPOCHS:
+        factor = (epoch + 1) / WARMUP_EPOCHS
+    else:
+        progress = (epoch - WARMUP_EPOCHS) / max(1, NUM_EPOCHS - WARMUP_EPOCHS)
+        factor = 0.5 * (1 + math.cos(math.pi * progress)) * 0.99 + 0.01
+    for group in optimizer.param_groups:
+        if group["name"] == "backbone":
+            group["lr"] = factor * BACKBONE_LR if group["lr"] > 0 else 0.0
+        else:
+            group["lr"] = factor * HEAD_LR
+
+
 def main():
     print("=" * 60)
     print(f"Training person detector on {DEVICE}")
@@ -153,38 +186,30 @@ def main():
     anchors    = anchor_gen()
     criterion  = SSDLoss(anchors, device=str(DEVICE))
 
-    # ── Optimiser + Scheduler ─────────────────────────────────
-    optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=LR, weight_decay=WEIGHT_DECAY
-    )
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=NUM_EPOCHS, eta_min=1e-5
-    )
+    # ── Optimiser ─────────────────────────────────────────────
+    optimizer = _build_optimizer(model, backbone_frozen=True)
 
     # ── Tensorboard ───────────────────────────────────────────
     writer = SummaryWriter(log_dir=LOG_DIR)
 
     # ── Training loop ─────────────────────────────────────────
     best_val_loss = float("inf")
+    no_improve    = 0
 
     for epoch in range(1, NUM_EPOCHS + 1):
         start = time.time()
 
-        # unfreeze backbone after FREEZE_EPOCHS
         if epoch == FREEZE_EPOCHS + 1:
             unfreeze_backbone(model)
-            # reset optimiser with lower LR for full fine-tuning
-            optimizer = optim.AdamW(
-                model.parameters(), lr=LR * 0.1,
-                weight_decay=WEIGHT_DECAY
-            )
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=NUM_EPOCHS - FREEZE_EPOCHS, eta_min=1e-6
-            )
+            for group in optimizer.param_groups:
+                if group["name"] == "backbone":
+                    group["lr"] = BACKBONE_LR
 
-        print(f"\nEpoch {epoch}/{NUM_EPOCHS} "
-              f"(lr={optimizer.param_groups[0]['lr']:.2e})")
+        _set_lr(optimizer, epoch - 1)
+
+        lrs = " / ".join(f"{g['name']}={g['lr']:.2e}"
+                         for g in optimizer.param_groups)
+        print(f"\nEpoch {epoch}/{NUM_EPOCHS} (lr: {lrs})")
 
         train_loss, train_cls, train_loc = train_one_epoch(
             model, train_loader, criterion, optimizer, epoch)
@@ -192,7 +217,6 @@ def main():
         val_loss, val_cls, val_loc = validate(
             model, val_loader, criterion)
 
-        scheduler.step()
         elapsed = time.time() - start
 
         print(f"  Train loss : {train_loss:.4f} "
@@ -201,21 +225,27 @@ def main():
               f"(cls: {val_cls:.4f}, loc: {val_loc:.4f})")
         print(f"  Time       : {elapsed:.1f}s")
 
-        # tensorboard
         writer.add_scalars("loss/total",
             {"train": train_loss, "val": val_loss}, epoch)
         writer.add_scalars("loss/cls",
             {"train": train_cls, "val": val_cls}, epoch)
         writer.add_scalars("loss/loc",
             {"train": train_loc, "val": val_loc}, epoch)
-        writer.add_scalar("lr",
-            optimizer.param_groups[0]["lr"], epoch)
+        for g in optimizer.param_groups:
+            writer.add_scalar(f"lr/{g['name']}", g["lr"], epoch)
 
-        # checkpoint
         is_best = val_loss < best_val_loss
         if is_best:
             best_val_loss = val_loss
+            no_improve    = 0
+        else:
+            no_improve += 1
         save_checkpoint(model, optimizer, epoch, val_loss, is_best)
+
+        if no_improve >= PATIENCE:
+            print(f"\n  Early stopping at epoch {epoch} "
+                  f"(no improvement for {PATIENCE} epochs)")
+            break
 
     writer.close()
     print("\n" + "=" * 60)
