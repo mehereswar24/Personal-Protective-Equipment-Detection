@@ -1,0 +1,97 @@
+{
+  "generated_at": "2026-08-14T20:55:20.335565+00:00",
+  "git_revision": "6903bee6456346c1f86c089e6b7f8de2cec8350b",
+  "environment": {
+    "torch": "2.7.1+cu118",
+    "torchvision": "0.22.1+cu118",
+    "cuda": "11.8"
+  },
+  "note": "Checkpoints are gitignored. This manifest identifies them; keep an off-machine backup of models/ - they are the expensive artifact and the only irreplaceable one.",
+  "checkpoints": [
+    {
+      "path": "old_3anchor_backup/person_detector_best.pth",
+      "bytes": 38393018,
+      "modified": "2026-04-07T03:31:48.504644+00:00",
+      "sha256": "7e20a1a50c262db6e84b550f7d9f1af05c0e9f8aa9641ef0e1d91bfd296db99b",
+      "epoch": 14,
+      "val_loss": 3.4857755303382874
+    },
+    {
+      "path": "old_3anchor_backup/person_detector_last.pth",
+      "bytes": 38393018,
+      "modified": "2026-04-07T03:43:44.725229+00:00",
+      "sha256": "5109ddc78b4eb91de4d713a3316f7345802265e580bccf1e223b6203bf68ac34",
+      "epoch": 50,
+      "val_loss": 3.557079255580902
+    },
+    {
+      "path": "old_3anchor_backup/ppe_detector_best.pth",
+      "bytes": 42673691,
+      "modified": "2026-05-04T16:04:36.176190+00:00",
+      "sha256": "784725d45959b762e0539d53da8e65b855ce3f34c2c4dc78cdfc6494ae296009",
+      "epoch": 65,
+      "val_loss": 1.1944355001575069
+    },
+    {
+      "path": "old_3anchor_backup/ppe_detector_last.pth",
+      "bytes": 42673691,
+      "modified": "2026-05-04T16:36:32.904558+00:00",
+      "sha256": "259f7583fdb7a2eaa10db693f5db9ec07747bf1093bf7583cf00974c5807f14f",
+      "epoch": 80,
+      "val_loss": 1.1993633900818073
+    },
+    {
+      "path": "person_detector_best.pth",
+      "bytes": 42064801,
+      "modified": "2026-05-24T07:42:49.974263+00:00",
+      "sha256": "a34ce7da322057f6012bcd692b5a16d09936f5cd3833931c82efb00ebc81dd55",
+      "epoch": 60,
+      "val_loss": 0.29009874311147954
+    },
+    {
+      "path": "person_detector_last.pth",
+      "bytes": 42064801,
+      "modified": "2026-05-24T07:42:49.829734+00:00",
+      "sha256": "393818a240d45be3e6aaa9a062ff3e918b8083aa5d26e279d71e82095baacd85",
+      "epoch": 60,
+      "val_loss": 0.29009874311147954
+    },
+    {
+      "path": "ppe_detector_best.pth",
+      "bytes": 50628955,
+      "modified": "2026-05-23T08:29:54.556401+00:00",
+      "sha256": "dbcc983113e813bd5a5e07f082c200c38796071b046f74bdde31faa68c4854ea",
+      "epoch": 75,
+      "val_loss": 0.7134068829543663
+    },
+    {
+      "path": "ppe_detector_last.pth",
+      "bytes": 50628955,
+      "modified": "2026-05-23T08:37:37.789398+00:00",
+      "sha256": "a1d6773e8923f3e51d339934897d141843e71f0119f73a28e2573d327c16d616",
+      "epoch": 80,
+      "val_loss": 0.7148275872071584
+    },
+    {
+      "path": "ppe_fcos.pth",
+      "bytes": 128844358,
+      "modified": "2026-08-14T18:20:48.176059+00:00",
+      "sha256": "2dc87908e12d31a482e9ade7af17b47e02a7015c3be0ad395794010e5406e9af",
+      "epoch": 13
+    },
+    {
+      "path": "ppe_fcos_epoch2_map0.4424.pth",
+      "bytes": 128844358,
+      "modified": "2026-08-14T13:59:42.926365+00:00",
+      "sha256": "8253db4dc0e591ecec3e294e41681c583b259df4c215afb090daef7644ac4c69",
+      "epoch": 2
+    },
+    {
+      "path": "ppe_fcos_last.pth",
+      "bytes": 512604571,
+      "modified": "2026-08-14T20:53:40.138479+00:00",
+      "sha256": "723d87c072ebc21eaf98b0990042c1fa0b6e40788e9fcbb0fe27f39e2b5d6d08",
+      "epoch": 24
+    }
+  ]
+}

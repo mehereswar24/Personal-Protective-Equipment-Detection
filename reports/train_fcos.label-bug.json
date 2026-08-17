@@ -1,0 +1,24 @@
+{
+ "args": {
+  "arch": "fcos",
+  "epochs": 1,
+  "batch": 2,
+  "size": 512,
+  "lr": 0.0001,
+  "backbone_lr": 1e-05,
+  "workers": 0,
+  "seed": 42,
+  "ema_decay": 0.9998,
+  "eval_batches": 4,
+  "out": "models/ppe_fcos.pth",
+  "smoke": true
+ },
+ "best_map50": 0.0,
+ "history": [
+  {
+   "epoch": 1,
+   "train_loss": 2.265470230579376,
+   "val_map50": 0.0
+  }
+ ]
+}

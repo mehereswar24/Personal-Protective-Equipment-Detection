@@ -1,0 +1,176 @@
+device=cuda  arch=fcos  size=640  batch=4  seed=42
+train=13382 val=2261
+train class counts: {'vest': 10039, 'helmet': 22603, 'head': 5332, 'boots': 10580, 'person': 7742, 'gloves': 3562}
+  epoch 1 step 50/80280 loss 2.2864 lr 1.00e-05
+  epoch 1 step 100/80280 loss 2.1321 lr 2.00e-05
+  epoch 1 step 150/80280 loss 1.9754 lr 3.00e-05
+  epoch 1 step 200/80280 loss 1.8761 lr 4.00e-05
+  epoch 1 step 250/80280 loss 1.7973 lr 5.00e-05
+  epoch 1 step 300/80280 loss 1.7303 lr 6.00e-05
+  epoch 1 step 350/80280 loss 1.6765 lr 7.00e-05
+  epoch 1 step 400/80280 loss 1.6322 lr 8.00e-05
+  epoch 1 step 450/80280 loss 1.5945 lr 9.00e-05
+  epoch 1 step 500/80280 loss 1.5606 lr 1.00e-04
+  epoch 1 step 550/80280 loss 1.5309 lr 1.00e-04
+  epoch 1 step 600/80280 loss 1.5057 lr 1.00e-04
+  epoch 1 step 650/80280 loss 1.4806 lr 1.00e-04
+  epoch 1 step 700/80280 loss 1.4594 lr 1.00e-04
+  epoch 1 step 750/80280 loss 1.4418 lr 1.00e-04
+  epoch 1 step 800/80280 loss 1.4255 lr 1.00e-04
+  epoch 1 step 850/80280 loss 1.4105 lr 1.00e-04
+  epoch 1 step 900/80280 loss 1.3943 lr 1.00e-04
+  epoch 1 step 950/80280 loss 1.3814 lr 1.00e-04
+  epoch 1 step 1000/80280 loss 1.3691 lr 1.00e-04
+  epoch 1 step 1050/80280 loss 1.3577 lr 1.00e-04
+  epoch 1 step 1100/80280 loss 1.3484 lr 1.00e-04
+  epoch 1 step 1150/80280 loss 1.3380 lr 1.00e-04
+  epoch 1 step 1200/80280 loss 1.3288 lr 1.00e-04
+  epoch 1 step 1250/80280 loss 1.3197 lr 1.00e-04
+  epoch 1 step 1300/80280 loss 1.3112 lr 1.00e-04
+  epoch 1 step 1350/80280 loss 1.3032 lr 1.00e-04
+  epoch 1 step 1400/80280 loss 1.2962 lr 1.00e-04
+  epoch 1 step 1450/80280 loss 1.2891 lr 1.00e-04
+  epoch 1 step 1500/80280 loss 1.2834 lr 1.00e-04
+  epoch 1 step 1550/80280 loss 1.2774 lr 1.00e-04
+  epoch 1 step 1600/80280 loss 1.2724 lr 1.00e-04
+  epoch 1 step 1650/80280 loss 1.2659 lr 9.99e-05
+  epoch 1 step 1700/80280 loss 1.2623 lr 9.99e-05
+  epoch 1 step 1750/80280 loss 1.2575 lr 9.99e-05
+  epoch 1 step 1800/80280 loss 1.2528 lr 9.99e-05
+  epoch 1 step 1850/80280 loss 1.2483 lr 9.99e-05
+  epoch 1 step 1900/80280 loss 1.2438 lr 9.99e-05
+  epoch 1 step 1950/80280 loss 1.2391 lr 9.99e-05
+  epoch 1 step 2000/80280 loss 1.2349 lr 9.99e-05
+  epoch 1 step 2050/80280 loss 1.2310 lr 9.99e-05
+  epoch 1 step 2100/80280 loss 1.2275 lr 9.99e-05
+  epoch 1 step 2150/80280 loss 1.2239 lr 9.99e-05
+  epoch 1 step 2200/80280 loss 1.2203 lr 9.99e-05
+  epoch 1 step 2250/80280 loss 1.2172 lr 9.99e-05
+  epoch 1 step 2300/80280 loss 1.2142 lr 9.99e-05
+  epoch 1 step 2350/80280 loss 1.2112 lr 9.99e-05
+  epoch 1 step 2400/80280 loss 1.2080 lr 9.99e-05
+  epoch 1 step 2450/80280 loss 1.2045 lr 9.99e-05
+  epoch 1 step 2500/80280 loss 1.2021 lr 9.98e-05
+  epoch 1 step 2550/80280 loss 1.1995 lr 9.98e-05
+  epoch 1 step 2600/80280 loss 1.1969 lr 9.98e-05
+  epoch 1 step 2650/80280 loss 1.1940 lr 9.98e-05
+  epoch 1 step 2700/80280 loss 1.1913 lr 9.98e-05
+  epoch 1 step 2750/80280 loss 1.1895 lr 9.98e-05
+  epoch 1 step 2800/80280 loss 1.1877 lr 9.98e-05
+  epoch 1 step 2850/80280 loss 1.1859 lr 9.98e-05
+  epoch 1 step 2900/80280 loss 1.1836 lr 9.98e-05
+  epoch 1 step 2950/80280 loss 1.1817 lr 9.98e-05
+  epoch 1 step 3000/80280 loss 1.1798 lr 9.98e-05
+  epoch 1 step 3050/80280 loss 1.1773 lr 9.98e-05
+  epoch 1 step 3100/80280 loss 1.1754 lr 9.97e-05
+  epoch 1 step 3150/80280 loss 1.1727 lr 9.97e-05
+  epoch 1 step 3200/80280 loss 1.1705 lr 9.97e-05
+  epoch 1 step 3250/80280 loss 1.1687 lr 9.97e-05
+  epoch 1 step 3300/80280 loss 1.1669 lr 9.97e-05
+epoch 1/24  loss 1.1651  val mAP@0.5 0.0008  (860s)
+    person   AP50 0.0000  (gt 52)
+    head     AP50 0.0017  (gt 140)
+    helmet   AP50 0.0009  (gt 309)
+    vest     AP50 0.0020  (gt 326)
+    gloves   AP50 0.0000  (gt 43)
+    boots    AP50 0.0000  (gt 142)
+    ** saved ppe_fcos.pth (mAP@0.5 0.0008)
+  epoch 2 step 3350/80280 loss 0.9743 lr 9.97e-05
+  epoch 2 step 3400/80280 loss 1.0230 lr 9.97e-05
+  epoch 2 step 3450/80280 loss 1.0251 lr 9.97e-05
+  epoch 2 step 3500/80280 loss 1.0228 lr 9.97e-05
+  epoch 2 step 3550/80280 loss 1.0244 lr 9.96e-05
+  epoch 2 step 3600/80280 loss 1.0222 lr 9.96e-05
+  epoch 2 step 3650/80280 loss 1.0263 lr 9.96e-05
+  epoch 2 step 3700/80280 loss 1.0256 lr 9.96e-05
+  epoch 2 step 3750/80280 loss 1.0294 lr 9.96e-05
+  epoch 2 step 3800/80280 loss 1.0306 lr 9.96e-05
+  epoch 2 step 3850/80280 loss 1.0322 lr 9.96e-05
+  epoch 2 step 3900/80280 loss 1.0343 lr 9.96e-05
+  epoch 2 step 3950/80280 loss 1.0346 lr 9.95e-05
+  epoch 2 step 4000/80280 loss 1.0361 lr 9.95e-05
+  epoch 2 step 4050/80280 loss 1.0322 lr 9.95e-05
+  epoch 2 step 4100/80280 loss 1.0304 lr 9.95e-05
+  epoch 2 step 4150/80280 loss 1.0289 lr 9.95e-05
+  epoch 2 step 4200/80280 loss 1.0299 lr 9.95e-05
+  epoch 2 step 4250/80280 loss 1.0284 lr 9.95e-05
+  epoch 2 step 4300/80280 loss 1.0283 lr 9.94e-05
+  epoch 2 step 4350/80280 loss 1.0275 lr 9.94e-05
+  epoch 2 step 4400/80280 loss 1.0271 lr 9.94e-05
+  epoch 2 step 4450/80280 loss 1.0256 lr 9.94e-05
+  epoch 2 step 4500/80280 loss 1.0253 lr 9.94e-05
+  epoch 2 step 4550/80280 loss 1.0237 lr 9.94e-05
+  epoch 2 step 4600/80280 loss 1.0234 lr 9.94e-05
+  epoch 2 step 4650/80280 loss 1.0227 lr 9.93e-05
+  epoch 2 step 4700/80280 loss 1.0220 lr 9.93e-05
+  epoch 2 step 4750/80280 loss 1.0213 lr 9.93e-05
+  epoch 2 step 4800/80280 loss 1.0212 lr 9.93e-05
+  epoch 2 step 4850/80280 loss 1.0215 lr 9.93e-05
+  epoch 2 step 4900/80280 loss 1.0212 lr 9.93e-05
+  epoch 2 step 4950/80280 loss 1.0219 lr 9.92e-05
+  epoch 2 step 5000/80280 loss 1.0211 lr 9.92e-05
+  epoch 2 step 5050/80280 loss 1.0212 lr 9.92e-05
+  epoch 2 step 5100/80280 loss 1.0208 lr 9.92e-05
+  epoch 2 step 5150/80280 loss 1.0206 lr 9.92e-05
+  epoch 2 step 5200/80280 loss 1.0203 lr 9.92e-05
+  epoch 2 step 5250/80280 loss 1.0201 lr 9.91e-05
+  epoch 2 step 5300/80280 loss 1.0196 lr 9.91e-05
+  epoch 2 step 5350/80280 loss 1.0190 lr 9.91e-05
+  epoch 2 step 5400/80280 loss 1.0187 lr 9.91e-05
+  epoch 2 step 5450/80280 loss 1.0182 lr 9.91e-05
+  epoch 2 step 5500/80280 loss 1.0184 lr 9.90e-05
+  epoch 2 step 5550/80280 loss 1.0182 lr 9.90e-05
+  epoch 2 step 5600/80280 loss 1.0180 lr 9.90e-05
+  epoch 2 step 5650/80280 loss 1.0185 lr 9.90e-05
+  epoch 2 step 5700/80280 loss 1.0182 lr 9.90e-05
+  epoch 2 step 5750/80280 loss 1.0177 lr 9.89e-05
+  epoch 2 step 5800/80280 loss 1.0171 lr 9.89e-05
+  epoch 2 step 5850/80280 loss 1.0167 lr 9.89e-05
+  epoch 2 step 5900/80280 loss 1.0172 lr 9.89e-05
+  epoch 2 step 5950/80280 loss 1.0170 lr 9.89e-05
+  epoch 2 step 6000/80280 loss 1.0170 lr 9.88e-05
+  epoch 2 step 6050/80280 loss 1.0170 lr 9.88e-05
+  epoch 2 step 6100/80280 loss 1.0164 lr 9.88e-05
+  epoch 2 step 6150/80280 loss 1.0164 lr 9.88e-05
+  epoch 2 step 6200/80280 loss 1.0164 lr 9.88e-05
+  epoch 2 step 6250/80280 loss 1.0168 lr 9.87e-05
+  epoch 2 step 6300/80280 loss 1.0162 lr 9.87e-05
+  epoch 2 step 6350/80280 loss 1.0158 lr 9.87e-05
+  epoch 2 step 6400/80280 loss 1.0159 lr 9.87e-05
+  epoch 2 step 6450/80280 loss 1.0154 lr 9.86e-05
+  epoch 2 step 6500/80280 loss 1.0147 lr 9.86e-05
+  epoch 2 step 6550/80280 loss 1.0144 lr 9.86e-05
+  epoch 2 step 6600/80280 loss 1.0144 lr 9.86e-05
+  epoch 2 step 6650/80280 loss 1.0143 lr 9.86e-05
+epoch 2/24  loss 1.0140  val mAP@0.5 0.0087  (995s)
+    person   AP50 0.0000  (gt 52)
+    head     AP50 0.0229  (gt 140)
+    helmet   AP50 0.0020  (gt 309)
+    vest     AP50 0.0265  (gt 326)
+    gloves   AP50 0.0010  (gt 43)
+    boots    AP50 0.0000  (gt 142)
+    ** saved ppe_fcos.pth (mAP@0.5 0.0087)
+  epoch 3 step 6700/80280 loss 1.0800 lr 9.85e-05
+  epoch 3 step 6750/80280 loss 1.0254 lr 9.85e-05
+  epoch 3 step 6800/80280 loss 1.0102 lr 9.85e-05
+  epoch 3 step 6850/80280 loss 1.0050 lr 9.85e-05
+  epoch 3 step 6900/80280 loss 1.0046 lr 9.84e-05
+  epoch 3 step 6950/80280 loss 1.0019 lr 9.84e-05
+  epoch 3 step 7000/80280 loss 1.0000 lr 9.84e-05
+  epoch 3 step 7050/80280 loss 0.9996 lr 9.84e-05
+  epoch 3 step 7100/80280 loss 0.9987 lr 9.83e-05
+  epoch 3 step 7150/80280 loss 0.9961 lr 9.83e-05
+  epoch 3 step 7200/80280 loss 0.9953 lr 9.83e-05
+  epoch 3 step 7250/80280 loss 0.9952 lr 9.83e-05
+  epoch 3 step 7300/80280 loss 0.9945 lr 9.82e-05
+  epoch 3 step 7350/80280 loss 0.9957 lr 9.82e-05
+  epoch 3 step 7400/80280 loss 0.9946 lr 9.82e-05
+  epoch 3 step 7450/80280 loss 0.9963 lr 9.82e-05
+  epoch 3 step 7500/80280 loss 0.9953 lr 9.81e-05
+  epoch 3 step 7550/80280 loss 0.9937 lr 9.81e-05
+  epoch 3 step 7600/80280 loss 0.9940 lr 9.81e-05
+  epoch 3 step 7650/80280 loss 0.9949 lr 9.81e-05
+  epoch 3 step 7700/80280 loss 0.9951 lr 9.80e-05
+  epoch 3 step 7750/80280 loss 0.9948 lr 9.80e-05
+  epoch 3 step 7800/80280 loss 0.9940 lr 9.80e-05
+  epoch 3 step 7850/80280 loss 0.9937 lr 9.79e-05

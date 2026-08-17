@@ -1,0 +1,35 @@
+﻿venv\Scripts\python.exe : fatal   : Memory allocation failure
+At line:1 char:351
++ ... ktop\ppe2"; venv\Scripts\python.exe tools\train_ppe.py --arch fcos -- ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (fatal   : Memory allocation failure:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+device=cuda  arch=fcos  size=640  batch=4  seed=42
+train=13382 val=2261
+train class counts: {'vest': 10039, 'helmet': 22603, 'head': 5332, 'boots': 10580, 'person': 7742, 'gloves': 3562}
+Traceback (most recent call last):
+  File "C:\Users\Mehereswar\Desktop\ppe2\tools\train_ppe.py", line 240, in <module>
+    raise SystemExit(main())
+  File "C:\Users\Mehereswar\Desktop\ppe2\tools\train_ppe.py", line 177, in main
+    for images, targets in train_loader:
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\utils\data\dataloader.py", line 733, in __next__
+    data = self._next_data()
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\utils\data\dataloader.py", line 1488, in _next_data
+    return self._process_data(data, worker_id)
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\utils\data\dataloader.py", line 1550, in _process_data
+    data.reraise()
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\_utils.py", line 749, in reraise
+    raise RuntimeError(msg) from None
+RuntimeError: Caught MemoryError in DataLoader worker process 2.
+Original Traceback (most recent call last):
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\utils\data\_utils\worker.py", line 349, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\utils\data\_utils\fetch.py", line 52, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "C:\Users\Mehereswar\Desktop\ppe2\venv\lib\site-packages\torch\utils\data\_utils\fetch.py", line 52, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "C:\Users\Mehereswar\Desktop\ppe2\ppe\dataset.py", line 172, in __getitem__
+    ((img.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD)
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 4.69 MiB for an array with shape (640, 640, 3) and data type float32
+

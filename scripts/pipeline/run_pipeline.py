@@ -9,10 +9,13 @@ import datetime
 import time
 import threading
 
-# Add project root to path for sort.py
+# Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
-from sort import Sort
+# Was `from sort import Sort` — a GPL-3.0 tracker that also imported
+# matplotlib/TkAgg at module scope (so this script could not start headless).
+# ppe.tracking.Tracker is an MIT reimplementation with the same call signature.
+from ppe.tracking import Tracker as Sort
 
 sys.path.append("scripts/person_detector")
 sys.path.append("scripts/ppe_classifiers")
@@ -52,9 +55,15 @@ PERSON_NMS        = 0.35   # slightly lower: avoids merging nearby workers into 
 PPE_NMS           = 0.20
 MAX_PERSONS       = 10
 TEMPORAL_WINDOW   = 7
-SORT_MAX_AGE      = 2      # reduced to prevent predicted boxes from shooting off
-SORT_MIN_HITS     = 1      # show tracks immediately (fixes flickering)
-SORT_IOU_THRESH   = 0.1    # lower threshold to allow for fast movement
+# max_age was 2, set to "prevent predicted boxes from shooting off". That was a
+# misdiagnosis: the tracker only ever emits boxes updated on the current frame,
+# so it never showed prediction-only boxes in the first place. The low value
+# just killed track continuity — a worker occluded for 3 frames came back with a
+# NEW id, which orphaned their temporal-vote history AND bypassed the 10-second
+# violation dedup (duplicate alerts for one person). 30 frames ≈ 1.2s at 25fps.
+SORT_MAX_AGE      = 30
+SORT_MIN_HITS     = 3      # debounce spurious single-frame detections
+SORT_IOU_THRESH   = 0.3
 INPUT_SIZE        = 300
 
 PPE_THRESHOLDS = {

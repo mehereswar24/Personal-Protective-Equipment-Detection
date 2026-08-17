@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ppe-detect"
+version = "0.2.0"
+description = "PPE compliance detection for live CCTV (no YOLO)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+
+# Runtime deps are pinned in requirements.txt because torch must be installed
+# from the CUDA index first; keep this list in sync for the packaged install.
+dependencies = [
+    "numpy>=2.0",
+    "opencv-python>=4.10",
+    "scipy>=1.13",
+    "Pillow>=10",
+    "PyYAML>=6",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+train = ["albumentations>=2.0"]
+serve = ["fastapi>=0.115", "uvicorn[standard]>=0.34", "pydantic>=2.10", "pydantic-settings>=2.7"]
+dev = ["pytest>=8.3", "psutil>=7.0"]
+
+[project.scripts]
+ppe-eval = "tools.eval_baseline:main"
+ppe-splits = "tools.build_splits:main"
+
+[tool.setuptools]
+packages = ["ppe"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
